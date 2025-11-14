@@ -1630,24 +1630,54 @@
 
         function calcularTimeline(dataInicio, totalHorasDev, totalHorasQA, horasTesteFluxo, totalHorasCorrecoes) {
             const isEstagiario = document.getElementById('isEstagiario').checked;
-            const horasPorDia = isEstagiario ? 6 : 9; // 9h trabalhadas por dia (8-12 e 13-18)
-            const periodoInicio = document.getElementById('periodoInicio').value;
+            const horasPorDia = isEstagiario ? 6 : 9;
+            const periodoInicioConfig = document.getElementById('periodoInicio').value;
             
-            // Manhã: 4h (8-12), Tarde: 5h (13-18)
             const horasManha = 4;
             const horasTarde = 5;
             
             let dataAtual = new Date(dataInicio + 'T00:00:00');
+            let periodoAtual = periodoInicioConfig; // 🔥 NOVO: Rastrear período atual
             let horasRestantes = 0;
             
             // Configurar horas restantes baseado no período e tipo de contrato
             if (isEstagiario) {
-                horasRestantes = periodoInicio === 'manha' ? 6 : 0;
+                horasRestantes = periodoInicioConfig === 'manha' ? 6 : 0;
             } else {
-                horasRestantes = periodoInicio === 'manha' ? horasManha : horasTarde;
+                horasRestantes = periodoInicioConfig === 'manha' ? horasManha : horasTarde;
             }
             
             const timeline = [];
+            
+            // 🔥 NOVO: Função auxiliar para avançar no tempo
+            function avancarTempo(horasNecessarias) {
+                while (horasNecessarias > 0) {
+                    // Pular finais de semana
+                    while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
+                        dataAtual.setDate(dataAtual.getDate() + 1);
+                        periodoAtual = 'manha';
+                        horasRestantes = isEstagiario ? 6 : horasManha;
+                    }
+                    
+                    const horasProcessar = Math.min(horasRestantes, horasNecessarias);
+                    horasNecessarias -= horasProcessar;
+                    horasRestantes -= horasProcessar;
+                    
+                    // 🔥 CORREÇÃO PRINCIPAL: Verificar período antes de avançar dia
+                    if (horasRestantes === 0 && horasNecessarias > 0) {
+                        if (!isEstagiario && periodoAtual === 'manha') {
+                            // ✅ Ainda tem tarde! Continua no MESMO dia
+                            periodoAtual = 'tarde';
+                            horasRestantes = horasTarde;
+                        } else {
+                            // ✅ Acabou o dia, avança para PRÓXIMO
+                            dataAtual.setDate(dataAtual.getDate() + 1);
+                            periodoAtual = 'manha';
+                            horasRestantes = isEstagiario ? 6 : horasManha;
+                        }
+                    }
+                }
+            }
             
             // Calcular datas de cada tarefa
             tarefasIds.forEach((id, index) => {
@@ -1657,30 +1687,8 @@
                 const horasTarefa = totalElement ? parseFloat(totalElement.textContent) : 0;
                 
                 if (horasTarefa > 0 && tarefa.trim()) {
-                    let horasProcessadas = 0;
                     const dataIniciaTarefa = new Date(dataAtual);
-                    
-                    while (horasProcessadas < horasTarefa) {
-                        // Pular finais de semana
-                        while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                            dataAtual.setDate(dataAtual.getDate() + 1);
-                            horasRestantes = horasPorDia;
-                        }
-                        
-                        const horasDisponiveis = Math.min(horasRestantes, horasTarefa - horasProcessadas);
-                        horasProcessadas += horasDisponiveis;
-                        horasRestantes -= horasDisponiveis;
-                        
-                        if (horasRestantes === 0) {
-                            dataAtual.setDate(dataAtual.getDate() + 1);
-                            // Pular finais de semana
-                            while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                                dataAtual.setDate(dataAtual.getDate() + 1);
-                            }
-                            horasRestantes = horasPorDia;
-                        }
-                    }
-                    
+                    avancarTempo(horasTarefa); // 🔥 USA A NOVA FUNÇÃO
                     const dataTerminaTarefa = new Date(dataAtual);
                     
                     timeline.push({
@@ -1701,25 +1709,7 @@
             // Calcular período de QA
             if (totalHorasQA > 0) {
                 const dataIniciaQA = new Date(dataAtual);
-                let horasQAProcessadas = 0;
-                
-                while (horasQAProcessadas < totalHorasQA) {
-                    while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                        dataAtual.setDate(dataAtual.getDate() + 1);
-                    }
-                    
-                    const horasDisponiveis = Math.min(horasRestantes, totalHorasQA - horasQAProcessadas);
-                    horasQAProcessadas += horasDisponiveis;
-                    horasRestantes -= horasDisponiveis;
-                    
-                    if (horasRestantes === 0) {
-                        dataAtual.setDate(dataAtual.getDate() + 1);
-                        while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                            dataAtual.setDate(dataAtual.getDate() + 1);
-                        }
-                        horasRestantes = horasPorDia;
-                    }
-                }
+                avancarTempo(totalHorasQA); // 🔥 USA A NOVA FUNÇÃO
                 
                 timeline.push({
                     numero: 'QA',
@@ -1734,25 +1724,7 @@
             // Calcular Teste de Fluxo
             if (horasTesteFluxo > 0) {
                 const dataIniciaTeste = new Date(dataAtual);
-                let horasTesteProcessadas = 0;
-                
-                while (horasTesteProcessadas < horasTesteFluxo) {
-                    while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                        dataAtual.setDate(dataAtual.getDate() + 1);
-                    }
-                    
-                    const horasDisponiveis = Math.min(horasRestantes, horasTesteFluxo - horasTesteProcessadas);
-                    horasTesteProcessadas += horasDisponiveis;
-                    horasRestantes -= horasDisponiveis;
-                    
-                    if (horasRestantes === 0) {
-                        dataAtual.setDate(dataAtual.getDate() + 1);
-                        while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                            dataAtual.setDate(dataAtual.getDate() + 1);
-                        }
-                        horasRestantes = horasPorDia;
-                    }
-                }
+                avancarTempo(horasTesteFluxo); // 🔥 USA A NOVA FUNÇÃO
                 
                 timeline.push({
                     numero: 'TF',
@@ -1767,25 +1739,7 @@
             // Calcular Correções
             if (totalHorasCorrecoes > 0) {
                 const dataIniciaCorrecao = new Date(dataAtual);
-                let horasCorrecoesProcessadas = 0;
-                
-                while (horasCorrecoesProcessadas < totalHorasCorrecoes) {
-                    while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                        dataAtual.setDate(dataAtual.getDate() + 1);
-                    }
-                    
-                    const horasDisponiveis = Math.min(horasRestantes, totalHorasCorrecoes - horasCorrecoesProcessadas);
-                    horasCorrecoesProcessadas += horasDisponiveis;
-                    horasRestantes -= horasDisponiveis;
-                    
-                    if (horasRestantes === 0) {
-                        dataAtual.setDate(dataAtual.getDate() + 1);
-                        while (dataAtual.getDay() === 0 || dataAtual.getDay() === 6) {
-                            dataAtual.setDate(dataAtual.getDate() + 1);
-                        }
-                        horasRestantes = horasPorDia;
-                    }
-                }
+                avancarTempo(totalHorasCorrecoes); // 🔥 USA A NOVA FUNÇÃO
                 
                 timeline.push({
                     numero: 'CR',
